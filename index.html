@@ -248,7 +248,8 @@
   /* Modal / onboarding */
   .modal-overlay{
     position:fixed;inset:0;background:rgba(39,59,61,.55);backdrop-filter:blur(2px);
-    display:none;align-items:center;justify-content:center;z-index:100;padding:18px;
+    display:none;align-items:flex-start;justify-content:center;z-index:100;
+    padding:clamp(20px,7vh,80px) 18px 24px;overflow-y:auto;
   }
   .modal-overlay.open{display:flex;}
   .modal{
@@ -823,6 +824,20 @@ if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matc
 buildColHead();
 newGame();
 if(!store.get('pindle-onboarded')) openOb();  // first visit → show tutorial
+
+/* Report height to a parent page so an embedding iframe can auto-resize
+   (kills trailing whitespace / internal scroll). Safe no-op if not embedded. */
+function sendHeight(){
+  try{
+    const w=document.querySelector('.wrap');
+    const h=Math.ceil(w.getBoundingClientRect().height)+28;
+    if(window.parent && window.parent!==window) window.parent.postMessage({type:'pindle:height',height:h},'*');
+  }catch(e){}
+}
+window.addEventListener('load',sendHeight);
+window.addEventListener('resize',sendHeight);
+if(window.ResizeObserver){ new ResizeObserver(sendHeight).observe(document.querySelector('.wrap')); }
+setTimeout(sendHeight,300);
 </script>
 </body>
 </html>
