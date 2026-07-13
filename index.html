@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pindle — guess the US city</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hammersmith+One&family=Manjari:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --dusty-rose:#FFEBEA;
+    --slate:#4A6F73;
+    --terracotta:#BB521F;
+    --cactus:#929577;
+    --gold:#FFCA7B;
+    --azure:#8CAEB2;
+    --body:#444444;
+    --night:#273B3D;
+    --sand:#FADCAE;
+
+    --bg:var(--dusty-rose);
+    --surface:#fffaf7;
+    --surface-line:#f0d9d6;
+    --ink:var(--body);
+    --structure:var(--slate);
+    --accent:var(--terracotta);
+    --tile-empty:#efe4dc;
+    --tile-empty-ink:#b9a99e;
+    --shadow:rgba(74,111,115,.18);
+  }
+  html[data-theme="dark"]{
+    --bg:var(--night);
+    --surface:#31494b;
+    --surface-line:#3f595b;
+    --ink:var(--sand);
+    --structure:#bcd3d1;
+    --accent:#e8794a;
+    --tile-empty:#38504f;
+    --tile-empty-ink:#7c9694;
+    --shadow:rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:'Nunito',system-ui,sans-serif;
+    color:var(--ink);
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(circle at 18% 12%, transparent 0 38px, var(--contour) 38px 39px, transparent 39px 78px, var(--contour) 78px 79px, transparent 79px 120px, var(--contour) 120px 121px, transparent 121px),
+      radial-gradient(circle at 84% 78%, transparent 0 30px, var(--contour) 30px 31px, transparent 31px 66px, var(--contour) 66px 67px, transparent 67px 108px, var(--contour) 108px 109px, transparent 109px 150px, var(--contour) 150px 151px, transparent 151px);
+    --contour:rgba(74,111,115,.06);
+    min-height:100vh;
+    transition:background-color .3s ease, color .3s ease;
+  }
+  html[data-theme="dark"] body{--contour:rgba(250,220,174,.05);}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px;}
+
+  /* Header */
+  header{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;margin-bottom:14px;}
+  .wordmark{display:flex;align-items:center;gap:10px;}
+  .wordmark h1{
+    font-family:'Hammersmith One',sans-serif;
+    font-size:clamp(38px,9vw,60px);
+    margin:0;color:var(--structure);letter-spacing:.5px;line-height:1;
+  }
+  .pin{width:clamp(34px,8vw,50px);height:auto;flex:0 0 auto;}
+  .tagline{font-size:15px;max-width:46ch;margin:2px 0 0;color:var(--ink);}
+  .counter{font-family:'Manjari',sans-serif;font-weight:700;color:var(--accent);font-size:16px;margin-top:2px;}
+  .mode-pill{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--structure);opacity:.75;}
+
+  /* Toolbar */
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:12px 0 16px;}
+  button.btn{
+    font-family:'Nunito',sans-serif;font-weight:700;font-size:14px;cursor:pointer;
+    border:2px solid var(--structure);background:var(--surface);color:var(--structure);
+    padding:8px 14px;border-radius:22px;transition:all .15s ease;
+  }
+  button.btn:hover{background:var(--structure);color:var(--surface);}
+  button.btn.active{background:var(--structure);color:var(--surface);}
+  button.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.btn.primary:hover{filter:brightness(1.08);}
+  button.btn:focus-visible{outline:3px solid var(--gold);outline-offset:2px;}
+
+  /* Column header */
+  .board{background:transparent;}
+  .col-head, .guess-row{
+    display:grid;
+    grid-template-columns:repeat(7, 1fr) minmax(74px, 1.4fr);
+    gap:6px;align-items:center;
+  }
+  .col-head{margin-bottom:8px;padding:0 2px;}
+  .col-head .ch{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--structure);cursor:help;border-radius:8px;padding:2px 0;}
+  .col-head .ch:not(.namehead):hover,.col-head .ch:focus-visible{background:rgba(74,111,115,.10);outline:none;}
+  .col-head .ch svg{width:20px;height:20px;}
+  .col-head .ch>span:not(.tip){font-family:'Manjari',sans-serif;font-weight:700;font-size:11px;line-height:1;text-align:center;}
+  .col-head .ch.namehead{cursor:default;}
+  .col-head .ch.namehead span{font-size:11px;opacity:.7;}
+  .col-head .ch .tip{
+    position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+    width:180px;max-width:44vw;background:var(--night);color:var(--sand);
+    padding:9px 11px;border-radius:10px;font-family:'Nunito',sans-serif;font-weight:600;
+    font-size:11.5px;line-height:1.4;text-align:left;box-shadow:0 8px 22px var(--shadow);
+    opacity:0;visibility:hidden;transition:opacity .15s ease;z-index:60;pointer-events:none;
+  }
+  .col-head .ch .tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--night);}
+  .col-head .ch:hover .tip,.col-head .ch:focus-visible .tip,.col-head .ch:focus .tip{opacity:1;visibility:visible;}
+  /* keep edge tooltips on-screen */
+  .col-head .ch:first-child .tip{left:0;transform:none;}
+  .col-head .ch:first-child .tip::after{left:24px;}
+  .col-head .ch:nth-child(7) .tip{left:auto;right:0;transform:none;}
+  .col-head .ch:nth-child(7) .tip::after{left:auto;right:24px;}
+
+  /* Rows */
+  .grid{display:flex;flex-direction:column;gap:6px;min-height:8px;}
+  .guess-row{animation:rowin .35s ease both;}
+  @keyframes rowin{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+
+  .tile{
+    position:relative;aspect-ratio:1/1;width:100%;max-width:60px;margin:0 auto;
+    border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--tile-empty);color:var(--tile-empty-ink);
+    box-shadow:0 1px 2px var(--shadow);
+    font-weight:800;overflow:hidden;
+  }
+  /* concentric terrain ring */
+  .tile::before{
+    content:"";position:absolute;inset:14%;border-radius:50%;
+    border:1.5px solid rgba(255,255,255,.35);
+    box-shadow:0 0 0 3px rgba(255,255,255,.14) inset;
+    pointer-events:none;
+  }
+  .tile .glyph{font-size:clamp(14px,4.4vw,20px);line-height:1;z-index:1;}
+  .tile .val{font-size:9px;font-weight:700;line-height:1;margin-top:2px;z-index:1;opacity:.95;}
+  .tile.match{background:var(--cactus);color:#fff;}
+  .tile.close{background:var(--gold);color:#5a3d12;}
+  .tile.far{background:var(--azure);color:#173033;}
+  .tile.match::before{border-color:rgba(255,255,255,.45);}
+
+  .rowname{
+    font-family:'Manjari',sans-serif;font-weight:700;font-size:13px;color:var(--ink);
+    text-align:left;padding-left:4px;line-height:1.1;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  html[data-reduce-motion="1"] .guess-row{animation:none;}
+
+  /* Input */
+  .inputzone{position:relative;margin-top:18px;}
+  .inputrow{display:flex;gap:8px;}
+  #guess{
+    flex:1;font-family:'Nunito',sans-serif;font-size:16px;font-weight:600;
+    padding:12px 14px;border-radius:14px;border:2px solid var(--structure);
+    background:var(--surface);color:var(--ink);
+  }
+  #guess:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--gold);}
+  #guess:disabled{opacity:.5;}
+  .ac{
+    position:absolute;left:0;right:96px;top:52px;z-index:20;
+    background:var(--surface);border:2px solid var(--structure);border-radius:12px;
+    max-height:260px;overflow:auto;box-shadow:0 8px 22px var(--shadow);display:none;
+  }
+  .ac.open{display:block;}
+  .ac-item{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--surface-line);}
+  .ac-item:last-child{border-bottom:none;}
+  .ac-item .ac-city{font-weight:800;color:var(--structure);}
+  .ac-item .ac-stats{font-size:11.5px;color:var(--ink);opacity:.85;margin-top:1px;}
+  .ac-item.sel,.ac-item:hover{background:var(--gold);}
+  .ac-item.sel .ac-city,.ac-item:hover .ac-city{color:#5a3d12;}
+
+  /* Banner */
+  .banner{
+    margin:16px 0 4px;padding:16px 18px;border-radius:16px;text-align:center;display:none;
+    background:var(--surface);border:2px solid var(--structure);
+  }
+  .banner.show{display:block;animation:rowin .4s ease both;}
+  .banner.win{border-color:var(--cactus);}
+  .banner.lose{border-color:var(--accent);}
+  .banner h2{font-family:'Manjari',sans-serif;font-weight:700;margin:0 0 4px;color:var(--structure);font-size:22px;}
+  .banner .reveal{font-size:14px;color:var(--ink);margin:6px 0 0;}
+  .banner .actions{margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+
+  .hint{font-size:12.5px;color:var(--ink);opacity:.7;text-align:center;margin-top:20px;line-height:1.5;}
+  .legend{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink);}
+  .legend .lg{display:flex;align-items:center;gap:5px;}
+  .legend .dot{width:16px;height:16px;border-radius:50%;display:inline-block;}
+  .stats-line{text-align:center;font-size:13px;color:var(--ink);opacity:.8;margin-top:8px;}
+  .sources{text-align:center;font-size:12px;color:var(--ink);opacity:.85;margin-top:14px;line-height:1.7;}
+  .sources strong{font-family:'Manjari',sans-serif;color:var(--structure);}
+  .sources a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;}
+  .sources a:hover{text-decoration:none;}
+  .sources a:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:3px;}
+  .toast{
+    position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);
+    background:var(--night);color:var(--sand);padding:10px 18px;border-radius:20px;font-weight:700;
+    opacity:0;transition:all .25s ease;z-index:50;font-size:14px;pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;}
+  @media (max-width:560px){
+    .wrap{padding:16px 12px 54px;}
+    /* city name gets its own line above the row of 7 tiles */
+    .col-head{grid-template-columns:repeat(7,1fr);gap:5px;}
+    .col-head .namehead{display:none;}
+    .guess-row{grid-template-columns:repeat(7,1fr);gap:5px;row-gap:1px;padding:2px 0;}
+    .guess-row .rowname{grid-column:1 / -1;order:-1;text-align:center;font-size:12px;padding:0 0 1px;}
+    .tile{max-width:54px;}
+    .tile .glyph{font-size:18px;}
+    .ac{right:78px;}
+    .toolbar{gap:6px;}
+    button.btn{padding:11px 13px;font-size:13px;}   /* ≥44px tap target */
+    .ac-item{padding:11px 12px;}
+    .modal .m-foot{flex-wrap:wrap;justify-content:center;gap:10px;}
+    .modal .dots{order:-1;width:100%;justify-content:center;}
+  }
+  @media (max-width:360px){
+    .tile .glyph{font-size:16px;}
+    .col-head .ch>span:not(.tip){font-size:10px;}
+  }
+
+  /* Learn beat */
+  .banner .learn{
+    font-size:13.5px;line-height:1.5;color:var(--ink);margin:10px auto 0;max-width:44ch;
+    background:rgba(146,149,119,.14);border:1px solid rgba(146,149,119,.4);
+    border-radius:12px;padding:9px 12px;
+  }
+  .banner .learn b{color:var(--structure);font-family:'Manjari',sans-serif;}
+
+  /* Confetti */
+  #confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:80;display:none;}
+  #confetti.on{display:block;}
+
+  /* Win flourish */
+  @keyframes pop{0%{transform:scale(1);}40%{transform:scale(1.28);}100%{transform:scale(1);}}
+  @keyframes pindrop{0%{transform:translateY(-40px) scale(.6);opacity:0;}60%{transform:translateY(6px) scale(1.05);opacity:1;}100%{transform:translateY(0) scale(1);opacity:1;}}
+  .guess-row.celebrate .tile{animation:pop .5s ease both;}
+  .guess-row.celebrate .tile:nth-child(1){animation-delay:.00s}
+  .guess-row.celebrate .tile:nth-child(2){animation-delay:.07s}
+  .guess-row.celebrate .tile:nth-child(3){animation-delay:.14s}
+  .guess-row.celebrate .tile:nth-child(4){animation-delay:.21s}
+  .guess-row.celebrate .tile:nth-child(5){animation-delay:.28s}
+  .guess-row.celebrate .tile:nth-child(6){animation-delay:.35s}
+  .guess-row.celebrate .tile:nth-child(7){animation-delay:.42s}
+  .banner.win .winpin{display:block;width:40px;height:auto;margin:0 auto 4px;animation:pindrop .55s ease both;}
+  .winpin{display:none;}
+  html[data-reduce-motion="1"] .guess-row.celebrate .tile,
+  html[data-reduce-motion="1"] .banner.win .winpin{animation:none;}
+
+  /* Modal / onboarding */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(39,59,61,.55);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:18px;
+  }
+  .modal-overlay.open{display:flex;}
+  .modal{
+    background:var(--surface);color:var(--ink);border-radius:20px;max-width:420px;width:100%;
+    box-shadow:0 20px 50px rgba(0,0,0,.3);border:2px solid var(--structure);
+    padding:18px 20px 20px;position:relative;animation:rowin .3s ease both;
+  }
+  .modal .m-close{
+    position:absolute;top:10px;right:12px;background:none;border:none;font-size:22px;line-height:1;
+    color:var(--structure);cursor:pointer;padding:4px 8px;border-radius:8px;font-family:'Nunito';
+  }
+  .modal .m-close:hover{background:rgba(74,111,115,.12);}
+  .modal .m-close:focus-visible{outline:3px solid var(--gold);outline-offset:2px;}
+  .modal h2{font-family:'Manjari',sans-serif;font-weight:700;color:var(--structure);margin:2px 30px 8px 0;font-size:22px;}
+  .modal p{font-size:14.5px;line-height:1.55;margin:0 0 10px;}
+  .modal .ex-row{display:flex;gap:8px;align-items:center;margin:12px 0;flex-wrap:wrap;justify-content:center;}
+  .modal .ex-tile{
+    width:46px;height:46px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-weight:800;color:#fff;position:relative;flex:0 0 auto;
+  }
+  .modal .ex-tile.match{background:var(--cactus);}
+  .modal .ex-tile.close{background:var(--gold);color:#5a3d12;}
+  .modal .ex-tile.far{background:var(--azure);color:#173033;}
+  .modal .ex-tile small{font-size:9px;font-weight:700;margin-top:1px;}
+  .modal .ex-note{font-size:12.5px;color:var(--ink);opacity:.85;margin:6px 0 0;text-align:left;}
+  .modal .m-foot{display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:10px;}
+  .modal .dots{display:flex;gap:6px;}
+  .modal .dots i{width:8px;height:8px;border-radius:50%;background:var(--surface-line);display:inline-block;transition:background .2s;}
+  .modal .dots i.on{background:var(--accent);}
+  .modal .m-nav{display:flex;gap:8px;}
+  .modal .skiplink{background:none;border:none;color:var(--structure);opacity:.7;font-family:'Nunito';font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;padding:6px;}
+  .modal .skiplink:hover{opacity:1;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="wordmark">
+      <svg class="pin" viewBox="0 0 48 60" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <ellipse cx="24" cy="55" rx="12" ry="3" fill="rgba(74,111,115,.18)"/>
+        <path d="M24 2C13.5 2 5 10.5 5 21c0 13.5 19 33 19 33s19-19.5 19-33C43 10.5 34.5 2 24 2z" fill="var(--terracotta)"/>
+        <circle cx="24" cy="21" r="11" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
+        <circle cx="24" cy="21" r="6" fill="none" stroke="#fff" stroke-width="2" opacity=".7"/>
+        <circle cx="24" cy="21" r="2.2" fill="#fff"/>
+      </svg>
+      <h1>Pindle</h1>
+    </div>
+    <p class="tagline" id="tagline">I'm thinking of a US city. Find it in 8.</p>
+    <div class="counter"><span id="counter">8</span> guesses left</div>
+  </header>
+
+  <div class="toolbar">
+    <button class="btn" id="helpBtn" title="How to play" aria-label="How to play">? How to play</button>
+    <button class="btn" id="infoBtn" aria-pressed="false">City Info: OFF</button>
+    <button class="btn" id="themeBtn" aria-pressed="false">Night map</button>
+    <button class="btn primary" id="newBtn">New Game</button>
+  </div>
+
+  <div class="board">
+    <div class="col-head" id="colhead" aria-hidden="true"></div>
+    <div class="grid" id="grid" role="list" aria-label="Your guesses"></div>
+  </div>
+
+  <div class="banner" id="banner" role="status" aria-live="polite">
+    <svg class="winpin" viewBox="0 0 48 60" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M24 2C13.5 2 5 10.5 5 21c0 13.5 19 33 19 33s19-19.5 19-33C43 10.5 34.5 2 24 2z" fill="var(--terracotta)"/>
+      <circle cx="24" cy="21" r="11" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>
+      <circle cx="24" cy="21" r="6" fill="none" stroke="#fff" stroke-width="2" opacity=".7"/>
+      <circle cx="24" cy="21" r="2.2" fill="#fff"/>
+    </svg>
+    <h2 id="bannerTitle"></h2>
+    <p class="reveal" id="bannerReveal"></p>
+    <p class="learn" id="learnBeat"></p>
+    <div class="actions">
+      <button class="btn primary" id="shareBtn">Share result</button>
+      <button class="btn" id="againBtn">New Game</button>
+    </div>
+  </div>
+
+  <div class="inputzone">
+    <div class="inputrow">
+      <input id="guess" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="Which city?" aria-label="Type a city name" aria-expanded="false"
+             aria-controls="ac" role="combobox" aria-autocomplete="list">
+      <button class="btn primary" id="submitBtn">Guess</button>
+    </div>
+    <div class="ac" id="ac" role="listbox" aria-label="City suggestions"></div>
+  </div>
+
+  <div class="legend" aria-hidden="true">
+    <span class="lg"><span class="dot" style="background:var(--cactus)"></span>✓ match</span>
+    <span class="lg"><span class="dot" style="background:var(--gold)"></span>close</span>
+    <span class="lg"><span class="dot" style="background:var(--azure)"></span>far</span>
+    <span class="lg">▲ secret is higher</span>
+    <span class="lg">▼ secret is lower</span>
+  </div>
+  <p class="stats-line" id="statsLine"></p>
+
+  <p class="hint">
+    Each guess scores your city against the secret across seven indicators. Arrows point toward the secret's value; a green ✓ means you're within range on that stat.
+    A green tile doesn't mean you found it — <strong>you win by naming the city.</strong> Hover an indicator icon above for what it means.
+  </p>
+  <p class="sources">
+    <strong>Where the data comes from:</strong><br>
+    Median income, median age &amp; people of color — <a href="https://www.census.gov/programs-surveys/acs" target="_blank" rel="noopener">US Census ACS 2023 (5-year)</a><br>
+    January &amp; July temperatures — <a href="https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals" target="_blank" rel="noopener">NOAA 1991–2020 U.S. Climate Normals</a><br>
+    Population &amp; latitude — <a href="https://github.com/plotly/datasets/blob/master/us-cities-top-1k.csv" target="_blank" rel="noopener">open top-cities dataset</a> (≈2013 vintage)
+  </p>
+</div>
+
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<div class="modal-overlay" id="obOverlay" role="dialog" aria-modal="true" aria-labelledby="obTitle">
+  <div class="modal">
+    <button class="m-close" id="obClose" aria-label="Skip tutorial">&times;</button>
+    <div id="obBody"></div>
+    <div class="m-foot">
+      <button class="skiplink" id="obSkip">Skip</button>
+      <div class="dots" id="obDots" aria-hidden="true"></div>
+      <div class="m-nav">
+        <button class="btn" id="obBack">Back</button>
+        <button class="btn primary" id="obNext">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const CITIES = [{"id":1,"city":"New York","state":"New York","region":"Northeast","pop":8405837,"lat":40.713,"incomeMedian":79713,"tempJan":33.7,"tempJul":77.5,"pocPct":68.7,"ageMedian":38.0},{"id":2,"city":"Los Angeles","state":"California","region":"West","pop":3884307,"lat":34.052,"incomeMedian":80366,"tempJan":57.9,"tempJul":69.6,"pocPct":71.7,"ageMedian":36.9},{"id":3,"city":"Chicago","state":"Illinois","region":"Midwest","pop":2718782,"lat":41.878,"incomeMedian":75134,"tempJan":25.2,"tempJul":75.4,"pocPct":67.8,"ageMedian":35.7},{"id":4,"city":"Houston","state":"Texas","region":"South","pop":2195914,"lat":29.76,"incomeMedian":62894,"tempJan":53.8,"tempJul":85.1,"pocPct":76.4,"ageMedian":34.3},{"id":5,"city":"Philadelphia","state":"Pennsylvania","region":"Northeast","pop":1553165,"lat":39.953,"incomeMedian":60698,"tempJan":33.7,"tempJul":78.7,"pocPct":66.4,"ageMedian":35.1},{"id":6,"city":"Phoenix","state":"Arizona","region":"West","pop":1513367,"lat":33.448,"incomeMedian":77041,"tempJan":56.8,"tempJul":95.5,"pocPct":58.7,"ageMedian":34.8},{"id":7,"city":"San Antonio","state":"Texas","region":"South","pop":1409019,"lat":29.424,"incomeMedian":62917,"tempJan":52.2,"tempJul":84.8,"pocPct":76.7,"ageMedian":34.6},{"id":8,"city":"San Diego","state":"California","region":"West","pop":1355896,"lat":32.716,"incomeMedian":104321,"tempJan":58.4,"tempJul":70.7,"pocPct":58.6,"ageMedian":36.0},{"id":9,"city":"Dallas","state":"Texas","region":"South","pop":1257676,"lat":32.777,"incomeMedian":67760,"tempJan":46.3,"tempJul":85.7,"pocPct":71.8,"ageMedian":33.4},{"id":10,"city":"San Jose","state":"California","region":"West","pop":998537,"lat":37.338,"incomeMedian":141565,"tempJan":50.8,"tempJul":69.5,"pocPct":76.8,"ageMedian":38.1},{"id":11,"city":"Austin","state":"Texas","region":"South","pop":885400,"lat":30.267,"incomeMedian":91461,"tempJan":50.1,"tempJul":84.5,"pocPct":52.4,"ageMedian":34.5},{"id":12,"city":"Indianapolis","state":"Indiana","region":"Midwest","pop":843393,"lat":39.768,"incomeMedian":62995,"tempJan":28.5,"tempJul":75.8,"pocPct":50.1,"ageMedian":34.1},{"id":13,"city":"Jacksonville","state":"Florida","region":"South","pop":842583,"lat":30.332,"incomeMedian":66981,"tempJan":54.2,"tempJul":82.5,"pocPct":52.3,"ageMedian":36.4},{"id":14,"city":"San Francisco","state":"California","region":"West","pop":837442,"lat":37.775,"incomeMedian":141446,"tempJan":51.3,"tempJul":64.0,"pocPct":62.5,"ageMedian":39.7},{"id":15,"city":"Columbus","state":"Ohio","region":"Midwest","pop":822553,"lat":39.961,"incomeMedian":65327,"tempJan":29.6,"tempJul":75.4,"pocPct":48.3,"ageMedian":33.0},{"id":16,"city":"Charlotte","state":"North Carolina","region":"South","pop":792862,"lat":35.227,"incomeMedian":78438,"tempJan":42.1,"tempJul":80.1,"pocPct":61.3,"ageMedian":34.4},{"id":17,"city":"Fort Worth","state":"Texas","region":"South","pop":792727,"lat":32.755,"incomeMedian":76602,"tempJan":46.3,"tempJul":85.7,"pocPct":62.7,"ageMedian":33.4},{"id":18,"city":"Detroit","state":"Michigan","region":"Midwest","pop":688701,"lat":42.331,"incomeMedian":39575,"tempJan":25.8,"tempJul":74.1,"pocPct":89.7,"ageMedian":35.1},{"id":19,"city":"El Paso","state":"Texas","region":"South","pop":674433,"lat":31.778,"incomeMedian":58734,"tempJan":46.5,"tempJul":84.4,"pocPct":87.8,"ageMedian":34.1},{"id":20,"city":"Memphis","state":"Tennessee","region":"South","pop":653450,"lat":35.15,"incomeMedian":51211,"tempJan":42.1,"tempJul":82.8,"pocPct":77.1,"ageMedian":34.3},{"id":21,"city":"Seattle","state":"Washington","region":"West","pop":652405,"lat":47.606,"incomeMedian":121984,"tempJan":42.8,"tempJul":67.1,"pocPct":40.1,"ageMedian":35.5},{"id":22,"city":"Denver","state":"Colorado","region":"West","pop":649495,"lat":39.739,"incomeMedian":91681,"tempJan":31.7,"tempJul":75.1,"pocPct":45.4,"ageMedian":35.2},{"id":23,"city":"Washington","state":"District of Columbia","region":"South","pop":646449,"lat":38.907,"incomeMedian":106287,"tempJan":37.5,"tempJul":81.0,"pocPct":63.4,"ageMedian":34.9},{"id":24,"city":"Boston","state":"Massachusetts","region":"Northeast","pop":645966,"lat":42.36,"incomeMedian":94755,"tempJan":29.9,"tempJul":74.1,"pocPct":55.5,"ageMedian":33.2},{"id":25,"city":"Nashville","state":"Tennessee","region":"South","pop":634464,"lat":36.163,"incomeMedian":75197,"tempJan":39.6,"tempJul":80.7,"pocPct":47.1,"ageMedian":34.4},{"id":26,"city":"Baltimore","state":"Maryland","region":"South","pop":622104,"lat":39.29,"incomeMedian":59623,"tempJan":34.3,"tempJul":78.3,"pocPct":73.8,"ageMedian":36.1},{"id":27,"city":"Oklahoma City","state":"Oklahoma","region":"South","pop":610613,"lat":35.468,"incomeMedian":66702,"tempJan":38.2,"tempJul":81.7,"pocPct":49.0,"ageMedian":35.0},{"id":28,"city":"Louisville","state":"Kentucky","region":"South","pop":609893,"lat":38.253,"incomeMedian":64731,"tempJan":35.7,"tempJul":79.9,"pocPct":39.0,"ageMedian":37.7},{"id":29,"city":"Portland","state":"Oregon","region":"West","pop":609456,"lat":45.523,"incomeMedian":88792,"tempJan":41.9,"tempJul":70.2,"pocPct":33.0,"ageMedian":38.6},{"id":30,"city":"Las Vegas","state":"Nevada","region":"West","pop":603488,"lat":36.17,"incomeMedian":70723,"tempJan":49.5,"tempJul":93.2,"pocPct":59.2,"ageMedian":38.5},{"id":31,"city":"Milwaukee","state":"Wisconsin","region":"Midwest","pop":599164,"lat":43.039,"incomeMedian":51888,"tempJan":24.0,"tempJul":73.3,"pocPct":67.7,"ageMedian":32.2},{"id":32,"city":"Albuquerque","state":"New Mexico","region":"West","pop":556495,"lat":35.085,"incomeMedian":65604,"tempJan":37.4,"tempJul":78.9,"pocPct":62.0,"ageMedian":38.7},{"id":33,"city":"Tucson","state":"Arizona","region":"West","pop":526116,"lat":32.222,"incomeMedian":54546,"tempJan":53.6,"tempJul":88.2,"pocPct":56.3,"ageMedian":34.6},{"id":34,"city":"Fresno","state":"California","region":"West","pop":509924,"lat":36.747,"incomeMedian":66804,"tempJan":48.0,"tempJul":83.5,"pocPct":75.3,"ageMedian":32.4},{"id":35,"city":"Sacramento","state":"California","region":"West","pop":479686,"lat":38.582,"incomeMedian":83753,"tempJan":47.6,"tempJul":75.9,"pocPct":69.8,"ageMedian":35.7},{"id":36,"city":"Long Beach","state":"California","region":"West","pop":469428,"lat":33.77,"incomeMedian":83969,"tempJan":57.1,"tempJul":73.1,"pocPct":72.8,"ageMedian":36.8},{"id":37,"city":"Kansas City","state":"Missouri","region":"Midwest","pop":467007,"lat":39.1,"incomeMedian":67449,"tempJan":29.0,"tempJul":78.2,"pocPct":45.5,"ageMedian":35.7},{"id":38,"city":"Mesa","state":"Arizona","region":"West","pop":457587,"lat":33.415,"incomeMedian":78779,"tempJan":56.8,"tempJul":95.5,"pocPct":39.3,"ageMedian":37.2},{"id":39,"city":"Virginia Beach","state":"Virginia","region":"South","pop":448479,"lat":36.853,"incomeMedian":90685,"tempJan":42.2,"tempJul":81.1,"pocPct":40.6,"ageMedian":37.4},{"id":40,"city":"Atlanta","state":"Georgia","region":"South","pop":447841,"lat":33.749,"incomeMedian":81938,"tempJan":44.8,"tempJul":80.9,"pocPct":61.7,"ageMedian":34.0},{"id":41,"city":"Colorado Springs","state":"Colorado","region":"West","pop":439886,"lat":38.834,"incomeMedian":83198,"tempJan":31.7,"tempJul":72.4,"pocPct":33.8,"ageMedian":35.6},{"id":42,"city":"Omaha","state":"Nebraska","region":"Midwest","pop":434353,"lat":41.252,"incomeMedian":72708,"tempJan":24.4,"tempJul":78.1,"pocPct":35.8,"ageMedian":35.3},{"id":43,"city":"Raleigh","state":"North Carolina","region":"South","pop":431746,"lat":35.78,"incomeMedian":82424,"tempJan":41.9,"tempJul":80.5,"pocPct":48.6,"ageMedian":34.7},{"id":44,"city":"Miami","state":"Florida","region":"South","pop":417650,"lat":25.762,"incomeMedian":59390,"tempJan":68.6,"tempJul":84.1,"pocPct":87.7,"ageMedian":39.7},{"id":45,"city":"Oakland","state":"California","region":"West","pop":406253,"lat":37.804,"incomeMedian":97369,"tempJan":49.9,"tempJul":63.9,"pocPct":72.1,"ageMedian":37.6},{"id":46,"city":"Minneapolis","state":"Minnesota","region":"Midwest","pop":400070,"lat":44.978,"incomeMedian":80269,"tempJan":16.2,"tempJul":74.3,"pocPct":40.5,"ageMedian":33.0},{"id":47,"city":"Tulsa","state":"Oklahoma","region":"South","pop":398121,"lat":36.154,"incomeMedian":58407,"tempJan":38.5,"tempJul":83.4,"pocPct":48.6,"ageMedian":35.5},{"id":48,"city":"Cleveland","state":"Ohio","region":"Midwest","pop":390113,"lat":41.499,"incomeMedian":39187,"tempJan":29.1,"tempJul":74.5,"pocPct":66.2,"ageMedian":36.3},{"id":49,"city":"Wichita","state":"Kansas","region":"Midwest","pop":386552,"lat":37.689,"incomeMedian":63072,"tempJan":33.2,"tempJul":81.5,"pocPct":39.8,"ageMedian":35.7},{"id":50,"city":"Arlington","state":"Texas","region":"South","pop":379577,"lat":32.736,"incomeMedian":73519,"tempJan":46.3,"tempJul":85.7,"pocPct":64.2,"ageMedian":33.6},{"id":51,"city":"New Orleans","state":"Louisiana","region":"South","pop":378715,"lat":29.951,"incomeMedian":55339,"tempJan":54.3,"tempJul":83.9,"pocPct":69.9,"ageMedian":38.4},{"id":52,"city":"Bakersfield","state":"California","region":"West","pop":363630,"lat":35.373,"incomeMedian":77397,"tempJan":49.5,"tempJul":84.8,"pocPct":71.0,"ageMedian":31.9},{"id":53,"city":"Tampa","state":"Florida","region":"South","pop":352957,"lat":27.951,"incomeMedian":71302,"tempJan":62.0,"tempJul":83.8,"pocPct":55.8,"ageMedian":35.6},{"id":54,"city":"Honolulu","state":"Hawaii","region":"West","pop":347884,"lat":21.307,"incomeMedian":85428,"tempJan":73.6,"tempJul":81.6,"pocPct":84.2,"ageMedian":42.9},{"id":55,"city":"Aurora","state":"Colorado","region":"West","pop":345803,"lat":39.729,"incomeMedian":84320,"tempJan":31.7,"tempJul":75.1,"pocPct":57.7,"ageMedian":35.1},{"id":56,"city":"Anaheim","state":"California","region":"West","pop":345012,"lat":33.835,"incomeMedian":90583,"tempJan":57.8,"tempJul":72.5,"pocPct":76.8,"ageMedian":35.9},{"id":57,"city":"Santa Ana","state":"California","region":"West","pop":334227,"lat":33.746,"incomeMedian":88354,"tempJan":57.8,"tempJul":72.5,"pocPct":91.3,"ageMedian":34.3},{"id":58,"city":"St. Louis","state":"Missouri","region":"Midwest","pop":318416,"lat":38.627,"incomeMedian":55279,"tempJan":32.1,"tempJul":80.4,"pocPct":55.6,"ageMedian":36.6},{"id":59,"city":"Riverside","state":"California","region":"West","pop":316619,"lat":33.953,"incomeMedian":88575,"tempJan":55.6,"tempJul":78.6,"pocPct":72.6,"ageMedian":33.1},{"id":60,"city":"Corpus Christi","state":"Texas","region":"South","pop":316381,"lat":27.801,"incomeMedian":66325,"tempJan":58.0,"tempJul":84.6,"pocPct":69.9,"ageMedian":36.3},{"id":61,"city":"Lexington-Fayette","state":"Kentucky","region":"South","pop":308428,"lat":38.041,"incomeMedian":67631,"tempJan":33.9,"tempJul":76.7,"pocPct":32.2,"ageMedian":35.2},{"id":62,"city":"Pittsburgh","state":"Pennsylvania","region":"Northeast","pop":305841,"lat":40.441,"incomeMedian":64137,"tempJan":28.8,"tempJul":73.2,"pocPct":37.5,"ageMedian":33.5},{"id":63,"city":"Anchorage","state":"Alaska","region":"West","pop":300950,"lat":61.218,"incomeMedian":98152,"tempJan":16.9,"tempJul":59.6,"pocPct":44.9,"ageMedian":34.9},{"id":64,"city":"Stockton","state":"California","region":"West","pop":298118,"lat":37.958,"incomeMedian":76851,"tempJan":48.0,"tempJul":78.1,"pocPct":82.5,"ageMedian":33.7},{"id":65,"city":"Cincinnati","state":"Ohio","region":"Midwest","pop":297517,"lat":39.103,"incomeMedian":51707,"tempJan":31.4,"tempJul":75.9,"pocPct":52.0,"ageMedian":33.0},{"id":66,"city":"St. Paul","state":"Minnesota","region":"Midwest","pop":294873,"lat":44.954,"incomeMedian":73055,"tempJan":16.2,"tempJul":74.3,"pocPct":49.4,"ageMedian":33.5},{"id":67,"city":"Toledo","state":"Ohio","region":"Midwest","pop":282313,"lat":41.664,"incomeMedian":47532,"tempJan":27.5,"tempJul":75.4,"pocPct":44.0,"ageMedian":35.7},{"id":68,"city":"Greensboro","state":"North Carolina","region":"South","pop":279639,"lat":36.073,"incomeMedian":58884,"tempJan":39.7,"tempJul":78.9,"pocPct":62.1,"ageMedian":34.1},{"id":69,"city":"Newark","state":"New Jersey","region":"Northeast","pop":278427,"lat":40.736,"incomeMedian":48416,"tempJan":32.8,"tempJul":78.2,"pocPct":90.7,"ageMedian":34.8},{"id":70,"city":"Plano","state":"Texas","region":"South","pop":274409,"lat":33.02,"incomeMedian":108649,"tempJan":46.3,"tempJul":85.7,"pocPct":51.8,"ageMedian":39.3},{"id":71,"city":"Henderson","state":"Nevada","region":"West","pop":270811,"lat":36.04,"incomeMedian":88654,"tempJan":49.5,"tempJul":93.2,"pocPct":41.1,"ageMedian":42.5},{"id":72,"city":"Lincoln","state":"Nebraska","region":"Midwest","pop":268738,"lat":40.826,"incomeMedian":69991,"tempJan":25.0,"tempJul":78.1,"pocPct":22.8,"ageMedian":33.4},{"id":73,"city":"Buffalo","state":"New York","region":"Northeast","pop":258959,"lat":42.886,"incomeMedian":48050,"tempJan":25.5,"tempJul":71.7,"pocPct":57.3,"ageMedian":34.3},{"id":74,"city":"Jersey City","state":"New Jersey","region":"Northeast","pop":257342,"lat":40.728,"incomeMedian":94813,"tempJan":32.8,"tempJul":78.2,"pocPct":76.0,"ageMedian":34.7},{"id":75,"city":"Chula Vista","state":"California","region":"West","pop":256780,"lat":32.64,"incomeMedian":105173,"tempJan":58.4,"tempJul":70.7,"pocPct":84.1,"ageMedian":37.0},{"id":76,"city":"Fort Wayne","state":"Indiana","region":"Midwest","pop":256496,"lat":41.079,"incomeMedian":60293,"tempJan":25.5,"tempJul":73.8,"pocPct":36.2,"ageMedian":35.0},{"id":77,"city":"Orlando","state":"Florida","region":"South","pop":255483,"lat":28.538,"incomeMedian":69268,"tempJan":60.6,"tempJul":82.6,"pocPct":67.2,"ageMedian":35.1},{"id":78,"city":"St. Petersburg","state":"Florida","region":"South","pop":249688,"lat":27.773,"incomeMedian":73118,"tempJan":62.0,"tempJul":83.8,"pocPct":36.4,"ageMedian":43.1},{"id":79,"city":"Chandler","state":"Arizona","region":"West","pop":249146,"lat":33.306,"incomeMedian":103691,"tempJan":56.8,"tempJul":95.5,"pocPct":44.7,"ageMedian":37.4},{"id":80,"city":"Laredo","state":"Texas","region":"South","pop":248142,"lat":27.531,"incomeMedian":63264,"tempJan":57.5,"tempJul":88.1,"pocPct":96.6,"ageMedian":29.7},{"id":81,"city":"Norfolk","state":"Virginia","region":"South","pop":246139,"lat":36.851,"incomeMedian":64017,"tempJan":42.2,"tempJul":81.1,"pocPct":58.5,"ageMedian":32.4},{"id":82,"city":"Durham","state":"North Carolina","region":"South","pop":245475,"lat":35.994,"incomeMedian":79234,"tempJan":41.9,"tempJul":80.5,"pocPct":59.5,"ageMedian":34.8},{"id":83,"city":"Madison","state":"Wisconsin","region":"Midwest","pop":243344,"lat":43.073,"incomeMedian":76983,"tempJan":19.4,"tempJul":71.9,"pocPct":29.7,"ageMedian":31.8},{"id":84,"city":"Lubbock","state":"Texas","region":"South","pop":239538,"lat":33.578,"incomeMedian":60487,"tempJan":41.1,"tempJul":81.2,"pocPct":50.1,"ageMedian":30.4},{"id":85,"city":"Irvine","state":"California","region":"West","pop":236716,"lat":33.684,"incomeMedian":129647,"tempJan":57.8,"tempJul":72.5,"pocPct":64.6,"ageMedian":33.9},{"id":86,"city":"Winston-Salem","state":"North Carolina","region":"South","pop":236441,"lat":36.1,"incomeMedian":57673,"tempJan":39.8,"tempJul":78.6,"pocPct":56.0,"ageMedian":35.6},{"id":87,"city":"Glendale","state":"Arizona","region":"West","pop":234632,"lat":33.539,"incomeMedian":70139,"tempJan":56.8,"tempJul":95.5,"pocPct":56.8,"ageMedian":34.5},{"id":88,"city":"Garland","state":"Texas","region":"South","pop":234566,"lat":32.913,"incomeMedian":74717,"tempJan":46.3,"tempJul":85.7,"pocPct":75.5,"ageMedian":34.7},{"id":89,"city":"Hialeah","state":"Florida","region":"South","pop":233394,"lat":25.858,"incomeMedian":53079,"tempJan":68.6,"tempJul":84.1,"pocPct":97.0,"ageMedian":45.9},{"id":90,"city":"Reno","state":"Nevada","region":"West","pop":233294,"lat":39.53,"incomeMedian":78448,"tempJan":36.9,"tempJul":77.2,"pocPct":41.7,"ageMedian":37.3},{"id":91,"city":"Chesapeake","state":"Virginia","region":"South","pop":230571,"lat":36.768,"incomeMedian":94189,"tempJan":42.2,"tempJul":81.1,"pocPct":45.6,"ageMedian":37.7},{"id":92,"city":"Gilbert","state":"Arizona","region":"West","pop":229972,"lat":33.353,"incomeMedian":121351,"tempJan":56.8,"tempJul":95.5,"pocPct":33.6,"ageMedian":35.7},{"id":93,"city":"Baton Rouge","state":"Louisiana","region":"South","pop":229426,"lat":30.458,"incomeMedian":49944,"tempJan":52.0,"tempJul":82.9,"pocPct":65.1,"ageMedian":31.8},{"id":94,"city":"Irving","state":"Texas","region":"South","pop":228653,"lat":32.814,"incomeMedian":79641,"tempJan":46.3,"tempJul":85.7,"pocPct":81.4,"ageMedian":32.8},{"id":95,"city":"Scottsdale","state":"Arizona","region":"West","pop":226918,"lat":33.494,"incomeMedian":107372,"tempJan":56.8,"tempJul":95.5,"pocPct":21.3,"ageMedian":49.2},{"id":96,"city":"North Las Vegas","state":"Nevada","region":"West","pop":226877,"lat":36.199,"incomeMedian":76772,"tempJan":49.5,"tempJul":93.2,"pocPct":76.6,"ageMedian":34.3},{"id":97,"city":"Fremont","state":"California","region":"West","pop":224922,"lat":37.548,"incomeMedian":176350,"tempJan":49.9,"tempJul":63.9,"pocPct":82.8,"ageMedian":38.8},{"id":98,"city":"Boise City","state":"Idaho","region":"West","pop":214237,"lat":43.619,"incomeMedian":81308,"tempJan":32.2,"tempJul":77.3,"pocPct":19.6,"ageMedian":38.2},{"id":99,"city":"Richmond","state":"Virginia","region":"South","pop":214114,"lat":37.541,"incomeMedian":62671,"tempJan":38.3,"tempJul":79.4,"pocPct":59.0,"ageMedian":34.5},{"id":100,"city":"San Bernardino","state":"California","region":"West","pop":213708,"lat":34.108,"incomeMedian":63988,"tempJan":56.1,"tempJul":79.2,"pocPct":88.2,"ageMedian":31.9}];
+
+/* ---------- Indicator config ---------- */
+const INDICATORS = [
+  {key:'pop',        label:'Pop',    icon:'people',    desc:'Population of the city proper — how many people live inside the city limits, not the wider metro area. Source: open top-cities dataset.'},
+  {key:'lat',        label:'Lat',    icon:'compass',   desc:'Latitude — how far north the city sits. Higher means further north. A quick proxy for where it is on the map. Source: open top-cities dataset.'},
+  {key:'incomeMedian',label:'Income',icon:'dollar',    desc:'Median household income — the midpoint, so half of households earn more and half less. Source: US Census ACS 2023.'},
+  {key:'tempJan',    label:'Jan °F', icon:'snow',      desc:'Average January temperature — a stand-in for how cold winters get. Source: NOAA 1991–2020 Climate Normals.'},
+  {key:'tempJul',    label:'Jul °F', icon:'sun',       desc:'Average July temperature — a stand-in for how hot summers get. Source: NOAA 1991–2020 Climate Normals.'},
+  {key:'pocPct',     label:'POC %',  icon:'group',     desc:'People of color — the share of residents who are not non-Hispanic white alone. Source: US Census ACS 2023.'},
+  {key:'ageMedian',  label:'Age',    icon:'hourglass', desc:'Median age — half the residents are older than this, half younger. Source: US Census ACS 2023.'}
+];
+const THRESHOLDS = {
+  pop:          { green: 0.05, close: 0.20, mode: "ratio" },
+  lat:          { green: 0.5,  close: 3.0,  mode: "abs"   },
+  incomeMedian: { green: 2000, close: 10000, mode: "abs"  },
+  tempJan:      { green: 2,    close: 6,    mode: "abs"   },
+  tempJul:      { green: 2,    close: 5,    mode: "abs"   },
+  pocPct:       { green: 3,    close: 10,   mode: "abs"   },
+  ageMedian:    { green: 1,    close: 3,    mode: "abs"   }
+};
+const ICONS = {
+  people:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c0-2.5 2.2-4 5-4s5 1.5 5 4M13 19c0-2.5 2.2-4 5-4"/></svg>',
+  compass:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke-linecap="round"/><path d="M12 6l2.5 5.5L12 18l-2.5-6.5z" fill="currentColor" stroke="none"/></svg>',
+  dollar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M16 7c0-2-2-3-4-3s-4 1-4 3.2C8 9 10 9.6 12 10s4 1 4 3.4C16 16 14 17 12 17s-4-1-4-3" stroke-linecap="round"/></svg>',
+  snow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v20M4 6l16 12M20 6L4 18"/><path d="M12 6l-2.5 2M12 6l2.5 2M12 18l-2.5-2M12 18l2.5-2"/></svg>',
+  sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>',
+  group:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><circle cx="5.5" cy="10" r="2.2"/><circle cx="18.5" cy="10" r="2.2"/><path d="M6 20c0-3 2.7-5 6-5s6 2 6 5" stroke-linecap="round"/></svg>',
+  hourglass:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M7 3h10M7 21h10M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9"/></svg>'
+};
+
+/* ---------- Helpers ---------- */
+const $=s=>document.querySelector(s);
+const byId=id=>document.getElementById(id);
+const abbr = n => n>=1e6 ? (n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,'')+'M'
+                        : n>=1e3 ? Math.round(n/1e3)+'k' : ''+n;
+const stateAbbr={"Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA","Colorado":"CO","Connecticut":"CT","Delaware":"DE","District of Columbia":"DC","Florida":"FL","Georgia":"GA","Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS","Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA","Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT","Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND","Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT","Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV","Wisconsin":"WI","Wyoming":"WY"};
+const sa=s=>stateAbbr[s]||s;
+
+function fmt(key,v){
+  switch(key){
+    case 'pop': return abbr(v);
+    case 'lat': return v.toFixed(1)+'°N';
+    case 'incomeMedian': return '$'+abbr(v);
+    case 'tempJan':
+    case 'tempJul': return Math.round(v)+'°';
+    case 'pocPct': return Math.round(v)+'%';
+    case 'ageMedian': return Math.round(v);
+  }
+}
+function statLine(c){
+  return `Pop ${abbr(c.pop)} · ${c.lat.toFixed(1)}°N · $${abbr(c.incomeMedian)} · Jan ${Math.round(c.tempJan)}°F · Jul ${Math.round(c.tempJul)}°F · POC ${Math.round(c.pocPct)}% · Age ${Math.round(c.ageMedian)}`;
+}
+function previewLine(c){
+  return `${c.city}, ${sa(c.state)} · ${statLine(c)}`;
+}
+
+/* seeded RNG for daily puzzle */
+function hashStr(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function todayKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
+/* localStorage (guarded — degrades to memory) */
+const mem={};
+const store={
+  get(k){try{return localStorage.getItem(k);}catch(e){return mem[k];}},
+  set(k,v){try{localStorage.setItem(k,v);}catch(e){mem[k]=v;}}
+};
+
+/* ---------- Scoring ---------- */
+function score(key,g,s){
+  const t=THRESHOLDS[key];
+  const diff=Math.abs(s-g);
+  const metric = t.mode==='ratio' ? (s===0?diff:diff/Math.abs(s)) : diff;
+  if(metric<=t.green) return {state:'MATCH'};
+  const dir = s>g ? 'HIGHER':'LOWER';
+  const sub = metric<=t.close ? 'CLOSE':'FAR';
+  return {state:dir, sub};
+}
+
+/* ---------- Game state ---------- */
+let secret=null, guessesLeft=8, over=false, history=[], infoOn=false;
+
+function pickSecret(){
+  return CITIES[Math.floor(Math.random()*CITIES.length)];
+}
+
+function newGame(){
+  secret=pickSecret();
+  guessesLeft=8; over=false; history=[];
+  byId('counter').textContent=guessesLeft;
+  byId('grid').innerHTML='';
+  byId('banner').className='banner';
+  const inp=byId('guess'); inp.value=''; inp.disabled=false;
+  byId('submitBtn').disabled=false;
+  closeAc();
+  byId('tagline').textContent = "I'm thinking of a US city. Find it in 8.";
+  renderStats();
+  track('game_start', {});
+  inp.focus();
+}
+
+/* ---------- Rendering ---------- */
+function buildColHead(){
+  const ch=byId('colhead');
+  ch.innerHTML=INDICATORS.map(i=>
+    `<div class="ch" tabindex="0" role="note" aria-label="${i.label}. ${i.desc}">`+
+      `<span class="ic" aria-hidden="true">${ICONS[i.icon]}</span>`+
+      `<span>${i.label}</span>`+
+      `<span class="tip" role="tooltip">${i.desc}</span>`+
+    `</div>`).join('')
+    + `<div class="ch namehead"><span>City</span></div>`;
+}
+
+function addRow(guessCity,silent){
+  const row=document.createElement('div');
+  row.className='guess-row'; row.setAttribute('role','listitem');
+  const win = guessCity.id===secret.id;
+  INDICATORS.forEach(ind=>{
+    const g=guessCity[ind.key], s=secret[ind.key];
+    const r= win ? {state:'MATCH'} : score(ind.key,g,s);
+    const tile=document.createElement('div');
+    let cls='tile', glyph='';
+    if(r.state==='MATCH'){cls+=' match';glyph='✓';}
+    else if(r.state==='HIGHER'){cls+= r.sub==='CLOSE'?' close':' far';glyph='▲';}
+    else {cls+= r.sub==='CLOSE'?' close':' far';glyph='▼';}
+    tile.className=cls;
+    const dirWord = r.state==='MATCH'?'matches':(r.state==='HIGHER'?'is higher than':'is lower than');
+    const tierWord = r.sub? (r.sub==='CLOSE'?' (close)':' (far)'):'';
+    tile.setAttribute('role','img');
+    tile.setAttribute('aria-label',`${ind.label}: secret city ${dirWord} ${guessCity.city}${tierWord}.`);
+    tile.innerHTML=`<span class="glyph" aria-hidden="true">${glyph}</span>`+
+                   `<span class="val" aria-hidden="true" style="display:${infoOn?'block':'none'}">${fmt(ind.key,g)}</span>`;
+    row.appendChild(tile);
+  });
+  const name=document.createElement('div');
+  name.className='rowname'; name.textContent=`${guessCity.city}, ${sa(guessCity.state)}`;
+  row.appendChild(name);
+  if(silent) row.style.animation='none';
+  byId('grid').appendChild(row);
+}
+
+function refreshInfoValues(){
+  document.querySelectorAll('.tile .val').forEach(v=>v.style.display=infoOn?'block':'none');
+}
+
+/* ---------- Guess flow ---------- */
+function submitGuess(){
+  if(over) return;
+  const raw=byId('guess').value.trim().toLowerCase();
+  if(!raw) return;
+  const match=CITIES.find(c=>c.city.toLowerCase()===raw || (`${c.city}, ${sa(c.state)}`).toLowerCase()===raw || (`${c.city}, ${c.state}`).toLowerCase()===raw);
+  if(!match){
+    // if exactly one autocomplete candidate, accept it
+    const cands=filterCities(raw);
+    if(cands.length===1){ commitGuess(cands[0]); return; }
+    toast('Pick a city from the list.'); return;
+  }
+  commitGuess(match);
+}
+function commitGuess(c){
+  if(history.some(h=>h.id===c.id)){ toast('Already guessed that one.'); return; }
+  history.push(c);
+  guessesLeft--;
+  byId('counter').textContent=Math.max(0,guessesLeft);
+  track('guess_made', {n: history.length, guess: c.city});
+  addRow(c,false);
+  byId('guess').value=''; closeAc();
+  const won=c.id===secret.id;
+  if(won){ finish(true); }
+  else if(guessesLeft<=0){ finish(false); }
+  else { byId('guess').focus(); }
+}
+
+function finish(won,silent){
+  over=true;
+  byId('guess').disabled=true; byId('submitBtn').disabled=true; closeAc();
+  const b=byId('banner');
+  b.className='banner show '+(won?'win':'lose');
+  byId('bannerTitle').textContent = won
+    ? `Good trouble. You found ${secret.city}, ${secret.state}.`
+    : `Out of guesses. It was ${secret.city}, ${secret.state}.`;
+  byId('bannerReveal').textContent = previewLine(secret);
+  renderLearnBeat(secret, won);
+  if(!silent){
+    recordStats(won);
+    track('game_end', {won, guesses: history.length, city: secret.city});
+    if(won) celebrate();
+  }
+  renderStats();
+}
+
+/* ---------- Stats ---------- */
+function recordStats(won){
+  const k='pindle-stats';
+  let st; try{st=JSON.parse(store.get(k))||{}}catch(e){st={}}
+  st.played=(st.played||0)+1;
+  st.wins=(st.wins||0)+(won?1:0);
+  st.streak = won ? (st.streak||0)+1 : 0;
+  st.maxStreak=Math.max(st.maxStreak||0, st.streak);
+  store.set(k,JSON.stringify(st));
+}
+function renderStats(){
+  let st; try{st=JSON.parse(store.get('pindle-stats'))||{}}catch(e){st={}}
+  if(!st.played){ byId('statsLine').textContent=''; return; }
+  const pct=Math.round(100*st.wins/st.played);
+  byId('statsLine').textContent=`Played ${st.played} · ${pct}% won · streak ${st.streak||0} (best ${st.maxStreak||0})`;
+}
+
+/* ---------- Share ---------- */
+function shareText(){
+  const emoji={MATCH:'🟩',CLOSE:'🟨',FAR:'🟦'};
+  const won=over && history.length && history[history.length-1].id===secret.id;
+  const head=`Pindle ${won?history.length:'X'}/8`;
+  const lines=history.map(c=>{
+    return INDICATORS.map(ind=>{
+      if(c.id===secret.id) return emoji.MATCH;
+      const r=score(ind.key,c[ind.key],secret[ind.key]);
+      if(r.state==='MATCH') return emoji.MATCH;
+      return r.sub==='CLOSE'?emoji.CLOSE:emoji.FAR;
+    }).join('');
+  });
+  return head+'\n'+lines.join('\n');
+}
+function doShare(){
+  const txt=shareText();
+  const done=()=>toast('Result copied to clipboard');
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>fallbackCopy(txt,done));
+  } else fallbackCopy(txt,done);
+}
+function fallbackCopy(txt,cb){
+  const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');cb();}catch(e){toast('Copy failed');}
+  document.body.removeChild(ta);
+}
+
+/* ---------- Autocomplete ---------- */
+let acItems=[], acSel=-1;
+function filterCities(q){
+  q=q.trim().toLowerCase();
+  if(!q) return [];
+  const starts=[], contains=[];
+  for(const c of CITIES){
+    const n=c.city.toLowerCase();
+    if(n.startsWith(q)) starts.push(c);
+    else if(n.includes(q)||sa(c.state).toLowerCase()===q||c.state.toLowerCase().includes(q)) contains.push(c);
+  }
+  return starts.concat(contains).slice(0,8);
+}
+function openAc(){
+  const q=byId('guess').value;
+  acItems=filterCities(q); acSel=-1;
+  const ac=byId('ac');
+  if(!acItems.length){ closeAc(); return; }
+  ac.innerHTML=acItems.map((c,i)=>
+    `<div class="ac-item" role="option" id="ac-opt-${i}" data-i="${i}">
+       <div class="ac-city">${c.city}, ${sa(c.state)}</div>
+       ${infoOn?`<div class="ac-stats">${statLine(c)}</div>`:''}
+     </div>`).join('');
+  ac.classList.add('open');
+  byId('guess').setAttribute('aria-expanded','true');
+  ac.querySelectorAll('.ac-item').forEach(el=>{
+    el.addEventListener('mousedown',e=>{e.preventDefault();commitGuess(acItems[+el.dataset.i]);});
+  });
+}
+function closeAc(){const ac=byId('ac');ac.classList.remove('open');ac.innerHTML='';acItems=[];acSel=-1;byId('guess').setAttribute('aria-expanded','false');}
+function moveAc(d){
+  if(!acItems.length) return;
+  acSel=(acSel+d+acItems.length)%acItems.length;
+  document.querySelectorAll('.ac-item').forEach((el,i)=>el.classList.toggle('sel',i===acSel));
+  const sel=document.getElementById('ac-opt-'+acSel);
+  if(sel) sel.scrollIntoView({block:'nearest'});
+}
+
+/* ---------- Toast ---------- */
+let toastT;
+function toast(msg){const t=byId('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1800);}
+
+/* ---------- Analytics hook ----------
+   Local-only for now. To enable aggregate metrics later, drop the PostHog
+   snippet in <head> and this will forward events automatically — no other
+   changes needed. Until then track() is a safe no-op. */
+function track(ev, props){
+  try{ if(window.posthog && posthog.capture) posthog.capture(ev, props||{}); }catch(e){}
+}
+
+/* ---------- Post-win learn beat (computed from the dataset, no AI) ---------- */
+const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);}
+function rankHi(key,v){return CITIES.filter(c=>c[key]>v).length+1;} // 1 = highest
+function rankLo(key,v){return CITIES.filter(c=>c[key]<v).length+1;} // 1 = lowest
+const SUPERLATIVES = [
+  {key:'pop',         edge:'hi', sup:'most populous city',          tail:'in Pindle'},
+  {key:'pop',         edge:'lo', sup:'smallest by population',      tail:'of the 100'},
+  {key:'lat',         edge:'hi', sup:'farthest north',             tail:'in the game'},
+  {key:'lat',         edge:'lo', sup:'farthest south',             tail:'in the game'},
+  {key:'incomeMedian',edge:'hi', sup:'highest median income',      tail:'of the 100 cities'},
+  {key:'incomeMedian',edge:'lo', sup:'lowest median income',       tail:'of the 100 cities'},
+  {key:'tempJan',     edge:'hi', sup:'warmest January',            tail:'of all 100 cities'},
+  {key:'tempJan',     edge:'lo', sup:'coldest January',            tail:'of all 100 cities'},
+  {key:'tempJul',     edge:'hi', sup:'hottest July',               tail:'of all 100 cities'},
+  {key:'tempJul',     edge:'lo', sup:'coolest July',               tail:'of all 100 cities'},
+  {key:'pocPct',      edge:'hi', sup:'highest share of residents of color', tail:'of the 100 cities'},
+  {key:'ageMedian',   edge:'hi', sup:'oldest by median age',       tail:'in the game'},
+  {key:'ageMedian',   edge:'lo', sup:'youngest by median age',     tail:'in the game'}
+];
+function learnInsights(city){
+  const scored = SUPERLATIVES.map(s=>{
+    const r = s.edge==='hi' ? rankHi(s.key,city[s.key]) : rankLo(s.key,city[s.key]);
+    return {...s, rank:r};
+  }).sort((a,b)=>a.rank-b.rank);
+  const out=[]; const usedKeys=new Set();
+  for(const s of scored){
+    if(usedKeys.has(s.key)) continue;      // one insight per indicator
+    usedKeys.add(s.key);
+    const pre = s.rank===1 ? 'the ' : 'the '+ordinal(s.rank)+'-';
+    out.push(`${pre}${s.sup} ${s.tail}`);
+    if(out.length===2) break;
+  }
+  return out;
+}
+function renderLearnBeat(city, won){
+  const ins = learnInsights(city);
+  const lead = won ? `You found <b>${city.city}</b> — it's ` : `It was <b>${city.city}</b> — `;
+  let txt = lead + ins[0] + '.';
+  if(ins[1]) txt += ` It's also ${ins[1]}.`;
+  byId('learnBeat').innerHTML = txt;
+}
+
+/* ---------- Confetti (canvas, dependency-free) ---------- */
+function celebrate(){
+  const row = byId('grid').lastElementChild;
+  if(row) row.classList.add('celebrate');
+  if(reducedMotion) return;
+  const cvs=byId('confetti'); cvs.classList.add('on');
+  const ctx=cvs.getContext('2d');
+  const W=cvs.width=innerWidth, H=cvs.height=innerHeight;
+  const colors=['#BB521F','#FFCA7B','#929577','#8CAEB2','#4A6F73'];
+  const parts=[];
+  for(let i=0;i<130;i++){
+    parts.push({x:Math.random()*W, y:-20-Math.random()*H*0.4, w:5+Math.random()*6,
+      c:colors[i%colors.length], vy:2.2+Math.random()*3.2, vx:-1.4+Math.random()*2.8,
+      rot:Math.random()*6.28, vr:-0.25+Math.random()*0.5});
+  }
+  const start=performance.now();
+  (function frame(now){
+    const el=now-start; ctx.clearRect(0,0,W,H);
+    parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.04;p.rot+=p.vr;
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.c;
+      ctx.globalAlpha=Math.max(0,1-el/2800);
+      ctx.fillRect(-p.w/2,-p.w/2,p.w,p.w*0.6);ctx.restore();});
+    if(el<2800){requestAnimationFrame(frame);} else {ctx.clearRect(0,0,W,H);cvs.classList.remove('on');}
+  })(start);
+}
+
+/* ---------- Onboarding ---------- */
+const OB_SCREENS = [
+  {title:"Find the secret city", html:
+    `<p>Pindle is hiding one of the <b>100 biggest US cities</b>. You've got <b>8 guesses</b> to name it.</p>
+     <p>Every city you guess is scored against the secret across seven things — population, location, climate, income, and more.</p>`},
+  {title:"Every guess is a clue", html:
+    `<div class="ex-row">
+       <div class="ex-tile far">▲<small>Pop</small></div>
+       <div class="ex-tile close">▼<small>Jul</small></div>
+       <div class="ex-tile match">✓<small>Age</small></div>
+     </div>
+     <p class="ex-note"><b>▲</b> the secret's value is higher than your guess &nbsp; · &nbsp; <b>▼</b> it's lower &nbsp; · &nbsp; <b>✓</b> you're spot on.</p>
+     <p class="ex-note"><b>Warm gold</b> means you're close on that stat; <b>cool blue</b> means you're far off. Arrows always carry the meaning, so color is never required.</p>`},
+  {title:"You win by naming it", html:
+    `<p>A green tile just means you matched <i>that one stat</i> — a wrong city can still light up green somewhere. <b>You only win by guessing the actual city.</b></p>
+     <p>Flip on <b>City Info</b> to see the raw numbers, hover any icon to see what it measures, and hit <b>New Game</b> for a fresh city anytime. Good trouble — go find it.</p>`}
+];
+let obIdx=0;
+function renderOb(){
+  const s=OB_SCREENS[obIdx];
+  byId('obBody').innerHTML=`<h2 id="obTitle">${s.title}</h2>${s.html}`;
+  byId('obDots').innerHTML=OB_SCREENS.map((_,i)=>`<i class="${i===obIdx?'on':''}"></i>`).join('');
+  byId('obBack').style.visibility = obIdx===0 ? 'hidden':'visible';
+  byId('obNext').textContent = obIdx===OB_SCREENS.length-1 ? 'Start playing' : 'Next';
+}
+function openOb(){obIdx=0;renderOb();byId('obOverlay').classList.add('open');byId('obNext').focus();track('tutorial_open');}
+function closeOb(){byId('obOverlay').classList.remove('open');store.set('pindle-onboarded','1');byId('guess').focus();}
+function obNext(){ if(obIdx<OB_SCREENS.length-1){obIdx++;renderOb();byId('obNext').focus();} else {closeOb();} }
+function obBack(){ if(obIdx>0){obIdx--;renderOb();} }
+
+/* ---------- Wire up ---------- */
+byId('infoBtn').addEventListener('click',function(){
+  infoOn=!infoOn;
+  this.textContent='City Info: '+(infoOn?'ON':'OFF');
+  this.classList.toggle('active',infoOn);
+  this.setAttribute('aria-pressed',infoOn);
+  this.title = infoOn
+    ? 'Showing stats on tiles and in the search suggestions. Click to hide.'
+    : 'Reveal each guess’s raw values on the tiles and in the search suggestions.';
+  refreshInfoValues();
+  // live-refresh the open autocomplete so the stat preview shows/hides immediately
+  if(byId('ac').classList.contains('open')) openAc();
+});
+byId('themeBtn').addEventListener('click',function(){
+  const dark=document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme',dark?'light':'dark');
+  this.textContent=dark?'Night map':'Day map';
+  this.setAttribute('aria-pressed',!dark);
+  store.set('pindle-theme',dark?'light':'dark');
+});
+byId('newBtn').addEventListener('click',()=>newGame());
+byId('againBtn').addEventListener('click',()=>newGame());
+byId('submitBtn').addEventListener('click',submitGuess);
+byId('shareBtn').addEventListener('click',doShare);
+
+/* Onboarding wiring */
+byId('helpBtn').addEventListener('click',openOb);
+byId('obNext').addEventListener('click',obNext);
+byId('obBack').addEventListener('click',obBack);
+byId('obSkip').addEventListener('click',closeOb);
+byId('obClose').addEventListener('click',closeOb);
+byId('obOverlay').addEventListener('click',e=>{if(e.target===byId('obOverlay'))closeOb();});
+document.addEventListener('keydown',e=>{
+  if(!byId('obOverlay').classList.contains('open'))return;
+  if(e.key==='Escape')closeOb();
+  else if(e.key==='ArrowRight')obNext();
+  else if(e.key==='ArrowLeft')obBack();
+});
+
+const inp=byId('guess');
+inp.addEventListener('input',openAc);
+inp.addEventListener('focus',()=>{if(inp.value)openAc();});
+inp.addEventListener('blur',()=>setTimeout(closeAc,120));
+inp.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'){e.preventDefault();moveAc(1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();moveAc(-1);}
+  else if(e.key==='Enter'){
+    e.preventDefault();
+    if(acSel>=0&&acItems[acSel]) commitGuess(acItems[acSel]);
+    else submitGuess();
+  } else if(e.key==='Escape'){closeAc();}
+});
+
+/* init */
+if(store.get('pindle-theme')==='dark'){document.documentElement.setAttribute('data-theme','dark');byId('themeBtn').textContent='Day map';byId('themeBtn').setAttribute('aria-pressed','true');}
+if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.setAttribute('data-reduce-motion','1');}
+buildColHead();
+newGame();
+if(!store.get('pindle-onboarded')) openOb();  // first visit → show tutorial
+</script>
+</body>
+</html>
