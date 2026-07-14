@@ -178,6 +178,12 @@
   .banner h2{font-family:'Manjari',sans-serif;font-weight:700;margin:0 0 4px;color:var(--structure);font-size:22px;}
   .banner .reveal{font-size:14px;color:var(--ink);margin:6px 0 0;}
   .banner .actions{margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+  .sharebox{
+    display:none;margin:12px auto 0;max-width:280px;white-space:pre;overflow-x:auto;
+    background:var(--bg);border:1px solid var(--surface-line);border-radius:10px;
+    padding:10px 12px;font-family:'Nunito',sans-serif;font-size:15px;line-height:1.35;
+    color:var(--ink);text-align:center;user-select:all;-webkit-user-select:all;
+  }
 
   .hint{font-size:12.5px;color:var(--ink);opacity:.7;text-align:center;margin-top:20px;line-height:1.5;}
   .legend{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink);}
@@ -242,7 +248,30 @@
   .guess-row.celebrate .tile:nth-child(7){animation-delay:.42s}
   .banner.win .winpin{display:block;width:40px;height:auto;margin:0 auto 4px;animation:pindrop .55s ease both;}
   .winpin{display:none;}
+
+  /* Per-guess tile reveal (staggered pop-in on every guess) */
+  @keyframes tilein{0%{transform:scale(.5);opacity:0;}60%{transform:scale(1.12);}100%{transform:scale(1);opacity:1;}}
+  .guess-row .tile{animation:tilein .36s ease both;}
+  .guess-row .tile:nth-child(1){animation-delay:.02s}
+  .guess-row .tile:nth-child(2){animation-delay:.09s}
+  .guess-row .tile:nth-child(3){animation-delay:.16s}
+  .guess-row .tile:nth-child(4){animation-delay:.23s}
+  .guess-row .tile:nth-child(5){animation-delay:.30s}
+  .guess-row .tile:nth-child(6){animation-delay:.37s}
+  .guess-row .tile:nth-child(7){animation-delay:.44s}
+
+  /* Reactive "heat" line */
+  .reaction{
+    min-height:20px;margin-top:6px;font-family:'Manjari',sans-serif;font-weight:700;
+    font-size:15px;color:var(--accent);opacity:0;transition:opacity .2s ease;
+  }
+  .reaction.show{opacity:1;}
+  .reaction.bump{animation:reactbump .4s ease;}
+  @keyframes reactbump{0%{transform:scale(1);}45%{transform:scale(1.12);}100%{transform:scale(1);}}
+
   html[data-reduce-motion="1"] .guess-row.celebrate .tile,
+  html[data-reduce-motion="1"] .guess-row .tile,
+  html[data-reduce-motion="1"] .reaction.bump,
   html[data-reduce-motion="1"] .banner.win .winpin{animation:none;}
 
   /* Modal / onboarding */
@@ -299,6 +328,7 @@
     </div>
     <p class="tagline" id="tagline">I'm thinking of a US city. Find it in 8.</p>
     <div class="counter"><span id="counter">8</span> guesses left</div>
+    <div class="reaction" id="reaction" role="status" aria-live="polite"></div>
   </header>
 
   <div class="toolbar">
@@ -327,6 +357,7 @@
       <button class="btn primary" id="shareBtn">Share result</button>
       <button class="btn" id="againBtn">New Game</button>
     </div>
+    <pre class="sharebox" id="shareBox" aria-live="polite"></pre>
   </div>
 
   <div class="inputzone">
@@ -472,6 +503,8 @@ function newGame(){
   byId('counter').textContent=guessesLeft;
   byId('grid').innerHTML='';
   byId('banner').className='banner';
+  byId('shareBox').style.display='none'; byId('shareBox').textContent='';
+  byId('reaction').textContent=''; byId('reaction').classList.remove('show'); lastHeat=null;
   const inp=byId('guess'); inp.value=''; inp.disabled=false;
   byId('submitBtn').disabled=false;
   closeAc();
@@ -539,8 +572,35 @@ function submitGuess(){
   }
   commitGuess(match);
 }
+/* Playful reaction based on how close a guess landed */
+let lastHeat=null;
+const HEAT={
+  hot:  ["So close!","Almost there.","You've nearly got it.","One more should do it."],
+  warm: ["Very close now.","Closing in.","Narrowing it down.","Getting hard to miss."],
+  mild: ["Getting closer.","On the right track.","Making progress.","Something's lining up."],
+  cool: ["Still a way to go.","Keep at it.","Not there yet.","A few things line up."],
+  cold: ["Long way to go.","Big rethink needed.","Not much lines up yet.","Back to the drawing board."]
+};
+function pick(a){return a[Math.floor(Math.random()*a.length)];}
+function reactToGuess(c){
+  let m=0,cl=0;
+  INDICATORS.forEach(ind=>{const r=score(ind.key,c[ind.key],secret[ind.key]);
+    if(r.state==='MATCH')m++; else if(r.sub==='CLOSE')cl++;});
+  const s=m*2+cl;
+  let tier = m>=5?'hot' : (m>=3||s>=8)?'warm' : s>=5?'mild' : s>=2?'cool' : 'cold';
+  let line=pick(HEAT[tier]);
+  if(lastHeat!==null && history.length>1){
+    if(s>lastHeat+1) line+=' Closer!';
+    else if(s<lastHeat-1) line+=' Further off…';
+  }
+  lastHeat=s;
+  const el=byId('reaction');
+  el.textContent=line; el.classList.add('show');
+  el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+}
+
 function commitGuess(c){
-  if(history.some(h=>h.id===c.id)){ toast('Already guessed that one.'); return; }
+  if(history.some(h=>h.id===c.id)){ flashReaction('Already guessed that one.'); return; }
   history.push(c);
   guessesLeft--;
   byId('counter').textContent=Math.max(0,guessesLeft);
@@ -548,9 +608,13 @@ function commitGuess(c){
   addRow(c,false);
   byId('guess').value=''; closeAc();
   const won=c.id===secret.id;
-  if(won){ finish(true); }
+  if(won){ byId('reaction').classList.remove('show'); finish(true); }
   else if(guessesLeft<=0){ finish(false); }
-  else { byId('guess').focus(); }
+  else { reactToGuess(c); byId('guess').focus(); }
+}
+function flashReaction(msg){
+  const el=byId('reaction'); el.textContent=msg; el.classList.add('show');
+  el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
 }
 
 function finish(won,silent){
@@ -603,17 +667,40 @@ function shareText(){
   });
   return head+'\n'+lines.join('\n');
 }
+function flashShare(label){
+  const b=byId('shareBtn'); const orig='Share result';
+  b.textContent=label; setTimeout(()=>{b.textContent=orig;},1600);
+}
 function doShare(){
   const txt=shareText();
-  const done=()=>toast('Result copied to clipboard');
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(done).catch(()=>fallbackCopy(txt,done));
-  } else fallbackCopy(txt,done);
+  // Always reveal the result inline so there's visible feedback even when
+  // clipboard/native-share are blocked (e.g. inside a cross-origin iframe).
+  const box=byId('shareBox');
+  box.textContent=txt; box.style.display='block';
+  // Native share sheet (mobile) if available
+  if(navigator.share){
+    navigator.share({title:'Pindle', text:txt}).catch(()=>{});
+  }
+  // Try clipboard; give clear feedback either way
+  let done=false;
+  const ok=()=>{if(!done){done=true;flashShare('Copied!');}};
+  const no=()=>{if(!done){done=true;flashShare('Copied below ↓');selectBox(box);}};
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(ok).catch(()=>fallbackCopy(txt,ok,no));
+    } else fallbackCopy(txt,ok,no);
+  }catch(e){ no(); }
 }
-function fallbackCopy(txt,cb){
-  const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();
-  try{document.execCommand('copy');cb();}catch(e){toast('Copy failed');}
-  document.body.removeChild(ta);
+function selectBox(box){
+  try{const r=document.createRange();r.selectNodeContents(box);const s=getSelection();s.removeAllRanges();s.addRange(r);}catch(e){}
+}
+function fallbackCopy(txt,ok,no){
+  try{
+    const ta=document.createElement('textarea');ta.value=txt;
+    ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();
+    const done=document.execCommand('copy');document.body.removeChild(ta);
+    done?ok():no();
+  }catch(e){ no(); }
 }
 
 /* ---------- Autocomplete ---------- */
